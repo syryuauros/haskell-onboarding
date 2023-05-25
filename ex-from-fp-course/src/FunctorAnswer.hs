@@ -12,6 +12,10 @@ class Functor' k where
 
 infixl 4 <$$>
 
+instance Functor' Maybe where
+  fmap' _ Nothing = Nothing
+  fmap' f (Just a) = Just (f a)
+
 
 -- | 1. Maps a function on the ExactlyOne functor
 --
@@ -26,27 +30,46 @@ data List a = Nil | Cons a (List a) deriving (Show, Foldable)
 
 -- | 2. Maps a function on the List functor
 --
--- >>> (+1) <$$> Nil
--- Nil
--- >>> (+1) <$$> Cons 1 (Cons 2 (Cons 3 Nil))
--- Cons 2 (Cons 3 (Cons 4 Nil))
+-- >>> (+1) <$$> []
+-- []
+-- >>> (+1) <$$> [1,2,3]
+-- [2,3,4]
 
-instance Functor' List where
-  -- fmap' _ Nil = Nil
-  -- fmap' f (Cons x xs) = Cons (f x) (fmap' f xs)
-  fmap' f = foldr (Cons . f) Nil
+instance Functor' [] where
+  -- fmap' _ [] = []
+  -- fmap' f (x:xs) = f x : fmap' f xs
+  fmap' f = foldr ((:) . f) []
 
--- newtype Reader r a = Reader { runReader :: r -> a }
 
--- | 3. Maps a function on the reader ((->) r) functor
+-- | 3. Maps a function on the function functor
 --
--- >>> ((+1) <$$> (*2)) 8
+-- >>> ((+1) <$$> (*2)) 8 (== (+1) <$$> (*2) $ 8)
 -- 17
 instance Functor' ((->) r) where
   -- fmap' :: (a -> b) -> (->) r a -> (->) r b
   -- fmap' :: (a -> b) -> (r -> a) -> (r -> b)
-  fmap' f g = f . g
+  -- fmap' f g = f . g
+  fmap' = (.)
 
+-- Some from Learn you a haskell
+-- What is (->) r ?
+-- The function type r -> a can be rewritten as (->) r a
+-- (->) is a type constructor that takes two type parameters
+-- To be a Functor instance, the type constructor has to take exactly one type parameter
+-- (->) r can be a Functor instance
+-- instance Functor ((->) r) where
+--   fmap f g = (\x -> f (g x))
+-- instance Functor (r ->) is not an allowed syntax
+-- fmap :: (a -> b) -> ((->) r a) -> ((->) r b)
+-- fmap :: (a -> b) -> (r -> a) -> (r -> b)
+-- We pipe the output of r -> a into input of a -> b to get a function r -> b
+-- What does it do?
+
+-- The fact that fmap is function composition when used on functions
+-- bends our minds a bit and let us see how things that
+-- act more like computations than boxes (IO and (->) r) can be functors.
+-- The function being mapped over a computation results in the same computation
+-- but the result of that computation is modified with the function.
 
 
 -- | 4. Anonymous map. Maps a constant value on a functor
@@ -55,9 +78,9 @@ instance Functor' ((->) r) where
 -- [7,7,7]
 -- >>> 3 <$$ Just 2
 -- Just 3
-(<$$) :: Functor' k => a -> k b -> k a
+(<$$) :: Functor f => a -> f b -> f a
 -- (<$$) x = fmap' (const x)
-(<$$) = fmap' . const
+(<$$) = fmap . const
 
 
 -- | 5. Apply a value to a functor-of-functions.
@@ -68,14 +91,15 @@ instance Functor' ((->) r) where
 -- "inside" the Functor:
 -- (<*>) :: Applicative k => k (a -> b) -> k a -> k b
 --
--- >>> (*2) : (+1) : const 99 : [] ??? 8
+-- >>> [(*2), (+1), const 99] ??? 8
 -- [16, 9, 99]
 --
 -- >>> Nothing ??? 2
 -- Nothing
-(???) :: Functor' k => k (a -> b) -> a -> k b
-(???) ff a =
-  error "todo"
+(???) :: Functor f => f (a -> b) -> a -> f b
+-- (???) ff a = ff <*> pure a
+(???) ff x = apply x <$> ff
+  where apply x' f = f x'
 infixl 1 ???
 
 
@@ -92,6 +116,5 @@ infixl 1 ???
 --
 -- >>> void (+10) 5
 -- ()
-void :: Functor' k => k a -> k ()
-void =
-  error "todo"
+void :: Functor f => f a -> f ()
+void = (<$$) ()
